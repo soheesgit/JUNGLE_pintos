@@ -122,6 +122,7 @@ timer_print_stats (void) {
 }
 
 /* Timer interrupt handler. */
+/* [SHARED] Alarm/MLFQS: 수면 스레드 깨우기와 주기 갱신의 순서 검토. Jira: KAN-78 */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;

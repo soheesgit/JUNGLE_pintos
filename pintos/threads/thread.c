@@ -176,6 +176,7 @@ thread_print_stats (void) {
    The code provided sets the new thread's `priority' member to
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
+/* [SHARED] Priority/MLFQS: 부모 값 상속과 생성 후 선점 처리 책임 검토. Jira: KAN-78 */
 tid_t
 thread_create (const char *name, int priority,
 		thread_func *function, void *aux) {
@@ -232,6 +233,7 @@ thread_block (void) {
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
+/* [SHARED] Alarm/Priority/MLFQS: READY 삽입 정책과 선점 처리 책임 검토. Jira: KAN-78 */
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
@@ -294,6 +296,7 @@ thread_exit (void) {
 
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
+/* [SHARED] Priority/MLFQS: 현재 스레드의 READY 재삽입 정책 검토. Jira: KAN-78 */
 void
 thread_yield (void) {
 	struct thread *curr = thread_current ();
@@ -309,6 +312,7 @@ thread_yield (void) {
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+/* [SHARED] Priority/MLFQS: 모드별 우선순위 변경과 변경 후 선점 처리 검토. Jira: KAN-78 */
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
@@ -397,6 +401,7 @@ kernel_thread (thread_func *function, void *aux) {
 
 /* Does basic initialization of T as a blocked thread named
    NAME. */
+/* [SHARED] 전체: 추가 필드의 초기값과 초기화 책임 검토. Jira: KAN-78 */   
 static void
 init_thread (struct thread *t, const char *name, int priority) {
 	ASSERT (t != NULL);
@@ -416,6 +421,7 @@ init_thread (struct thread *t, const char *name, int priority) {
    empty.  (If the running thread can continue running, then it
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
+/* [SHARED] Priority/MLFQS: 다음 실행 대상 선택과 동일 우선순위 처리 검토. Jira: KAN-78 */   
 static struct thread *
 next_thread_to_run (void) {
 	if (list_empty (&ready_list))
