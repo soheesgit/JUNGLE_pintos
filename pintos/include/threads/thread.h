@@ -85,6 +85,7 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
+/* [SHARED] 전체: 추가 필드의 의미·초기화 책임과 list 원소의 용도 검토. Jira: KAN-78 */
 struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
