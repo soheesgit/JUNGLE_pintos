@@ -14,7 +14,7 @@ KAIST Pintos의 Project 1(Threads)을 팀 단위로 구현하는 프로젝트입
 |:---:|:---:|:---:|
 | <img src="https://github.com/kylekim0868-cpu.png" width="80" height="80"> | 김영민 | [@kylekim0868-cpu](https://github.com/kylekim0868-cpu) |
 | <img src="https://github.com/Leo-2894.png" width="80" height="80"> | 김도영 | [@Leo-2894](https://github.com/Leo-2894) |
-| <img src="https://github.com/soheegram.png" width="80" height="80"> | 문소희 | [@soheesgit](https://github.com/soheesgit) |
+| <img src="https://github.com/soheesgit.png" width="80" height="80"> | 문소희 | [@soheesgit](https://github.com/soheesgit) |
 ## 🛠️ 개발 환경
 
 | 항목 | 환경 |
