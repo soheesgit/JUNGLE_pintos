@@ -7,6 +7,7 @@
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "lib/kernel/list.h"//리스트 자료형 사용을 위한 헤더 파일
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -29,6 +30,8 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
+static struct list sleep_list;//잠자는 thread list
+
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
@@ -36,6 +39,7 @@ void
 timer_init (void) {
 	/* 8254 input frequency divided by TIMER_FREQ, rounded to
 	   nearest. */
+	   list_init (&sleep_list);//목록 초기화
 	uint16_t count = (1193180 + TIMER_FREQ / 2) / TIMER_FREQ;
 
 	outb (0x43, 0x34);    /* CW: counter 0, LSB then MSB, mode 2, binary. */
@@ -89,12 +93,31 @@ timer_elapsed (int64_t then) {
 
 /* Suspends execution for approximately TICKS timer ticks. */
 void
-timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+timer_sleep (int64_t delay) {
+	// int64_t start = timer_ticks (); 필요X
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	// while (timer_elapsed (start) < ticks)
+	// 	thread_yield (); 문제의 코드
+	
+	/*기다릴 시간이 0 이하일 경우 잠들지 않고 즉시 반환*/
+	if(delay <= 0)
+	return;
+
+	enum intr_level old_intr = intr_disable();//타이머 인터럽트가 끼어들지 않도록 현재 인터럽트 상태를 저장하고 종료
+	struct thread *current = thread_current();//현재 실행 중인 쓰레드의 구조체를 가리키는 포인터를 가져옴
+
+	/* 현재 타이머 시각에 기다릴 tick수를 더해 이 쓰레드가 깨어나야 할 '목표' 시각을 기록 */
+	current->wakeup_t = timer_ticks() + delay;
+
+	/* list.c/list_push_back 함수(리스트 항목을 넣고 빼거나, 순회하는 핀토스 내장 함수)를 사용하여
+	현재 쓰레드의 리스트 요소를 sleep_list 끝에 추가 */
+	list_push_back (&sleep_list, &current->elem);
+	
+	thread_block();//쓰레드를 잠들게 만들어 대기 시킨다
+
+	/* 타이머 처리에서 이 스레드를 깨워 재실행시 함수가 잠들기 전에 저장해 둔 intr 상태를 복구 */
+	intr_set_level (old_intr);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -124,9 +147,29 @@ timer_print_stats (void) {
 /* Timer interrupt handler. */
 /* [SHARED] Alarm/MLFQS: 수면 스레드 깨우기와 주기 갱신의 순서 검토. Jira: KAN-78 */
 static void
-timer_interrupt (struct intr_frame *args UNUSED) {
+timer_interrupt (struct intr_frame *args UNUSED) {//중복 함수
 	ticks++;
 	thread_tick ();
+	
+	//기상 시각에 도달했거나 지난 잠자는 쓰레드 찾아서 깨우는 기능
+	//->
+	struct list_elem *e = list_begin (&sleep_list);//잠자는 쓰레드 목록을 순회할 때 현재 위치를 가리킨다
+	
+	while (e->next==NULL)/*sleep_list 전체를 순회 종료조건 : */
+	{
+		struct thread *wt = list_entry(list_begin(&sleep_list), struct thread, elem);
+		if(wt->wakeup_t<=ticks)
+		{
+			e=list_remove(e);
+			thread_unblock(wt);
+			
+		}else
+		{
+			e=list_next(e);
+		}
+
+	}
+	
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
