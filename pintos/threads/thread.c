@@ -183,32 +183,74 @@ thread_create (const char *name, int priority,
 	struct thread *t;
 	tid_t tid;
 
-	ASSERT (function != NULL);
+	ASSERT (function != NULL); // ASSERT 매크로: 인자로 받은 function이 비었다면 "assertion 함수명 failed." 출력
 
 	/* Allocate thread. */
-	t = palloc_get_page (PAL_ZERO);
+	/* 스레드 공간 할당 */
+	t = palloc_get_page (PAL_ZERO); // 0바이트로 채워진 4KB 빈 공간 할당
 	if (t == NULL)
 		return TID_ERROR;
 
 	/* Initialize thread. */
+	/* 스레드 초기화 */
 	init_thread (t, name, priority);
-	tid = t->tid = allocate_tid ();
+	/*
+			thread 구조체 초기화
+				tid_t tid = 1 (첫 호출 = 1, 호출할 때마다 +1씩 증가)
+				enum thread-status = BLOCKED
+				name = "high priority"
+				priority = 32
+				unsigned magic = 0xcd6abf4b
+				tf.rsp = t+ (4096-8)
+				tt.rip = kernel_thread() 시작 주소
+				tf.~
+	*/
+	tid = t->tid = allocate_tid (); // allocate_tid()= Thread마다 서로 다른 번호인 TID를 발급 (1,2,3..) Thread 생성할 때마다 tid는 1씩 증가해서 할당
 
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
-	t->tf.rip = (uintptr_t) kernel_thread;
-	t->tf.R.rdi = (uint64_t) function;
-	t->tf.R.rsi = (uint64_t) aux;
-	t->tf.ds = SEL_KDSEG;
-	t->tf.es = SEL_KDSEG;
-	t->tf.ss = SEL_KDSEG;
-	t->tf.cs = SEL_KCSEG;
-	t->tf.eflags = FLAG_IF;
+	t->tf.rip = (uintptr_t) kernel_thread; // kernel_thread()는 새 커널 Thread가 실행할 함수를 시작하고, 그 함수가 끝나면 Thread를 종료하는 공통 시작 함수
+	t->tf.R.rdi = (uint64_t) function; // kernel_thread()의 첫 번째 인자로 실행할 함수 주소를 전달하도록 준비
+	t->tf.R.rsi = (uint64_t) aux; // 두 번째 인자로 그 함수에 넘길 데이터 aux를 전달하도록 준비
+	t->tf.ds = SEL_KDSEG; // 데이터 세그먼트에 커널용 선택자를 설정
+	t->tf.es = SEL_KDSEG; // 추가 데이터 세그먼트에도 커널용 선택자를 설정
+	t->tf.ss = SEL_KDSEG; // 스택 세그먼트에 커널용 선택자를 설정
+	t->tf.cs = SEL_KCSEG; // 코드 세그먼트에 커널용 선택자를 설정
+	t->tf.eflags = FLAG_IF; // 플래그의 인터럽트 허용 비트를 설정
 
 	/* Add to run queue. */
-	thread_unblock (t);
+	thread_unblock (t); // thread_unblock 함수는 새 스레드 상태를 바꾸기 위해 인터럽트를 끄고 READY로 바꿔 ready-list에 연결한다
 
+	/* ❗️priority-preempt 테스트 fail지점 
+		현재 새 스레드를 생성하고 READY만 시켜놓고 스케쥴러는 기존 스레드를 끌어내리는 코드가 없다.
+		✔︎ 설계
+			- RUNNING중인 기존 스레드와 새 스레드의 우선순위를 비교
+			- 기존 스레드 < 새 스레드 → thread_yield() 호출
+			- thread_yield()은 기존 스레드가 RUNNING이라면 READY 떨어트리기만 한다
+			- ready-list를 내림차순으로 정렬
+			- ready-list list_ordered_insert 함수를 활용해 삽입
+			- pop_front함수 호출
+			- 그 구조체를 실행시키는 함수?를 찾아서 호출
+		？ 기존 스레드 정보는 어떻게 가져오나? ready-list에서 가져오면 되지 않나? -> thread_current()는 현재 스레드 구조체 가리키는 구조체 포인터를 반환한다
+	*/
+	if(thread_current()->priority < t->priority){
+		thread_yield();
+	}
 	return tid;
+}
+
+/* Compares the value of two list elements A and B, given
+   auxiliary data AUX.  Returns true if A is less than B, or
+   false if A is greater than or equal to B. */
+bool priority_higher(const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+	const struct thread *thread_a = list_entry(a, struct thread, elem);
+	const struct thread *thread_b = list_entry(b, struct thread, elem);
+	if(thread_a->priority > thread_b->priority){
+		return true;
+	}else{
+		return false;
+	}
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -242,7 +284,8 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	// list_push_back (&ready_list, &t->elem); // ✅ 최초의 base 코드
+	list_insert_ordered(&ready_list, &t->elem, priority_higher, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -306,7 +349,8 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		// list_push_back (&ready_list, &curr->elem); // ✅ 최초 base code
+		list_insert_ordered(&ready_list, &curr->elem, priority_higher, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -411,7 +455,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	memset (t, 0, sizeof *t);
 	t->status = THREAD_BLOCKED;
 	strlcpy (t->name, name, sizeof t->name);
-	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
+	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *); // rsp = t + 오프셋(4096 - 8)
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
 }
