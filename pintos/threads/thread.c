@@ -79,6 +79,24 @@ static tid_t allocate_tid (void);
 // setup temporal gdt first.
 static uint64_t gdt[3] = { 0, 0x00af9a000000ffff, 0x00cf92000000ffff };
 
+// 일반 정수를 17.14 고정소수점 형식으로 변환하는 것이다.
+// 즉 2^14(16,384)의 값을 곱해준다.
+int int_to_fp(int num) {
+	return num * FLAG_NT; // FLAG_NT엔 16384의 값이 들어있다.
+}
+
+// 17.14 고정소수점으로 표현된 값을 일반 정수로 변환한다. 소수 부분을 0 방향으로 버림해준다.
+int fp_to_int(int num) {
+	return num / FLAG_NT;
+}
+
+// 고정소수점 값을 가장 가까운 정수로 반올림하는 함수
+// int fp_to_int_round(int num) {
+	// 만약 양수가 0.5보다 작으면? 내린다.
+
+	// 만약 0.5보다 크면? 올린다.
+// }
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
