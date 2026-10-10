@@ -360,6 +360,18 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	/* TODO: ready-list 목록이 비어 있다면 우선순위 비교 로직 Skip */
+	if(!list_empty(&ready_list))
+	{
+		/* TODO: ready-list(내림차순 정렬 가정) 맨 앞 원소의 구조체 조회 */
+		struct thread *t = list_entry(list_begin(&ready_list), struct thread, elem); /* list_begin을 활용해 ready-list의 맨 앞 원소의 주소값을 가져오고 그 주소값을 구조체의 시작 주소값으로 반환해주는 list_entry 사용 */
+		
+		if(t->priority > thread_current()->priority)
+		{
+			/* TODO: thread_yield()함수 호출하여 thread 점유 */
+			thread_yield();
+		}
+	}
 }
 
 /* Returns the current thread's priority. */
